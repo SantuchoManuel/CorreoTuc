@@ -1,0 +1,180 @@
+@page "/productos"
+@inject ProductoService ProductoService
+
+<PageTitle>Productos</PageTitle>
+
+<h1>Productos</h1>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger alert-dismissible" role="alert">
+        @error
+        <button type="button" class="btn-close" aria-label="Cerrar" @onclick="() => error = null"></button>
+    </div>
+}
+
+<div class="card mb-4">
+    <div class="card-header">@(productoEditado.Id == 0 ? "Nuevo producto" : $"Editar producto #{productoEditado.Id}")</div>
+    <div class="card-body">
+        <EditForm Model="productoEditado" OnValidSubmit="GuardarAsync" FormName="producto">
+            <DataAnnotationsValidator />
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="nombre">Nombre</label>
+                    <InputText id="nombre" class="form-control" @bind-Value="productoEditado.Nombre" />
+                    <ValidationMessage For="() => productoEditado.Nombre" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="precio">Precio</label>
+                    <InputNumber id="precio" class="form-control" @bind-Value="productoEditado.Precio" />
+                    <ValidationMessage For="() => productoEditado.Precio" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="stock">Stock</label>
+                    <InputNumber id="stock" class="form-control" @bind-Value="productoEditado.Stock" />
+                    <ValidationMessage For="() => productoEditado.Stock" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="descripcion">Descripción</label>
+                    <InputTextArea id="descripcion" class="form-control" rows="2" @bind-Value="productoEditado.Descripcion" />
+                    <ValidationMessage For="() => productoEditado.Descripcion" />
+                </div>
+            </div>
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary" disabled="@guardando">
+                    @(productoEditado.Id == 0 ? "Crear" : "Guardar cambios")
+                </button>
+                @if (productoEditado.Id != 0)
+                {
+                    <button type="button" class="btn btn-secondary ms-2" @onclick="Cancelar">Cancelar</button>
+                }
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@if (productos is null)
+{
+    <p><em>Cargando...</em></p>
+}
+else if (productos.Count == 0)
+{
+    <p>No hay productos registrados.</p>
+}
+else
+{
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th class="text-end">Precio</th>
+                <th class="text-end">Stock</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var producto in productos)
+            {
+                <tr>
+                    <td>@producto.Id</td>
+                    <td>@producto.Nombre</td>
+                    <td>@producto.Descripcion</td>
+                    <td class="text-end">@producto.Precio.ToString("C")</td>
+                    <td class="text-end">@producto.Stock</td>
+                    <td class="text-end text-nowrap">
+                        @if (idPorEliminar == producto.Id)
+                        {
+                            <span class="me-2">¿Eliminar?</span>
+                            <button class="btn btn-sm btn-danger" @onclick="() => EliminarAsync(producto.Id)">Sí</button>
+                            <button class="btn btn-sm btn-secondary ms-1" @onclick="() => idPorEliminar = null">No</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(producto)">Editar</button>
+                            <button class="btn btn-sm btn-outline-danger ms-1" @onclick="() => idPorEliminar = producto.Id">Eliminar</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Producto>? productos;
+    private Producto productoEditado = new();
+    private int? idPorEliminar;
+    private bool guardando;
+    private string? error;
+
+    protected override Task OnInitializedAsync() => CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            productos = await ProductoService.ObtenerTodosAsync();
+        }
+        catch (Exception ex)
+        {
+            productos = [];
+            error = $"No se pudieron cargar los productos: {ex.Message}";
+        }
+    }
+
+    private void Editar(Producto producto)
+    {
+        // Se edita una copia para no modificar la fila hasta guardar
+        productoEditado = new Producto
+        {
+            Id = producto.Id,
+            Nombre = producto.Nombre,
+            Descripcion = producto.Descripcion,
+            Precio = producto.Precio,
+            Stock = producto.Stock
+        };
+    }
+
+    private void Cancelar() => productoEditado = new();
+
+    private async Task GuardarAsync()
+    {
+        guardando = true;
+        try
+        {
+            if (productoEditado.Id == 0)
+                await ProductoService.CrearAsync(productoEditado);
+            else
+                await ProductoService.ActualizarAsync(productoEditado);
+
+            productoEditado = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo guardar el producto: {ex.Message}";
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private async Task EliminarAsync(int id)
+    {
+        idPorEliminar = null;
+        try
+        {
+            await ProductoService.EliminarAsync(id);
+            if (productoEditado.Id == id)
+                productoEditado = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo eliminar el producto: {ex.Message}";
+        }
+    }
+}
